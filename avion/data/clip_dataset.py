@@ -31,14 +31,14 @@ def get_video_reader(videoname, num_threads, fast_rrc, rrc_params, fast_rcc, rcc
             videoname,
             num_threads=num_threads,
             width=rrc_params[0], height=rrc_params[0],
-            use_rrc=True, scale_min=rrc_params[1][0], scale_max=rrc_params[1][1],
+            # scale_min=rrc_params[1][0], scale_max=rrc_params[1][1],
         )
     elif fast_rcc:
         video_reader = decord.VideoReader(
             videoname,
             num_threads=num_threads,
             width=rcc_params[0], height=rcc_params[0],
-            use_rcc=True,
+            # use_rcc=True,
         )
     else:
         video_reader = decord.VideoReader(videoname, num_threads=num_threads)

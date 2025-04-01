@@ -64,8 +64,11 @@ def generate_label_map(dataset):
         vn_list = sorted(vn_list)
         print('# of action= {}'.format(len(vn_list)))
         mapping_vn2act = {vn: i for i, vn in enumerate(vn_list)}
+        print('mapping_vn2act', mapping_vn2act)
         labels = [list(set(mapping_vn2narration[vn_list[i]])) for i in range(len(mapping_vn2act))]
-        print(labels[:5])
+        # shape of the labels
+        # print(len(labels), len(labels[0]), labels[0])
+        # print(labels[:5])
     elif dataset == 'charades_ego':
         print("=> preprocessing charades_ego action label space")
         vn_list = []

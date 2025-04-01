@@ -33,6 +33,8 @@ import avion.utils.distributed as dist_utils
 from avion.utils.evaluation_ek100cls import get_marginal_indexes, get_mean_accuracy, marginalize
 from avion.utils.meters import AverageMeter, ProgressMeter
 from avion.utils.misc import check_loss_nan, generate_label_map
+import numpy as np
+import ast
 
 
 def get_args_parser():
@@ -243,7 +245,7 @@ def main(args):
             epoch = checkpoint['epoch'] if 'epoch' in checkpoint else 0
             args.start_epoch = epoch
             result = model.load_state_dict(checkpoint['state_dict'], strict=False)
-            print(result)
+            print("Loaded model result:", result)
             optimizer.load_state_dict(checkpoint['optimizer']) if 'optimizer' in checkpoint else ()
             scaler.load_state_dict(checkpoint['scaler']) if 'scaler' in checkpoint else ()
             best_acc1 = checkpoint['best_acc1']
@@ -307,7 +309,8 @@ def main(args):
     val_transform_gpu = torch.nn.Sequential(*gpu_val_transform_ls)
 
     # build dataset
-    _, mapping_vn2act = generate_label_map(args.dataset)
+    args.label , mapping_vn2act = generate_label_map(args.dataset)
+    args.vn_to_act = mapping_vn2act
     if args.dataset == 'ek100_cls':
         args.mapping_act2v = {i: int(vn.split(':')[0]) for (vn, i) in mapping_vn2act.items()}
         args.mapping_act2n = {i: int(vn.split(':')[1]) for (vn, i) in mapping_vn2act.items()}
@@ -317,10 +320,13 @@ def main(args):
     train_dataset = get_downstream_dataset(
         train_transform, crop_size, args, subset='train', label_mapping=mapping_vn2act,
     )
+
+
     args.num_clips = num_clips_at_val
     val_dataset = get_downstream_dataset(
         val_transform, crop_size, args, subset='val', label_mapping=mapping_vn2act,
     )
+
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -344,7 +350,6 @@ def main(args):
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=False, sampler=val_sampler, drop_last=False
     )
-    print('len(val_loader) = {}'.format(len(val_loader)))
 
     if args.evaluate:
         val_stats = validate(val_loader, val_transform_gpu, model, args, len(val_dataset))
@@ -357,8 +362,6 @@ def main(args):
         args.lr, args.lr_end, args.epochs, len(train_loader) // args.update_freq,
         warmup_epochs=args.warmup_epochs, start_warmup_value=args.lr_start
     )
-
-    print(args)
 
     print("=> beginning training")
     best_acc1 = 0.
@@ -526,6 +529,12 @@ def validate(val_loader, transform_gpu, model, args, num_videos):
             end = time.time()
             for i, (videos, targets) in enumerate(val_loader):
                 # measure data loading time
+
+                # visalize the video
+                # plot video with matplotlib
+
+
+
                 data_time.update(time.time() - end)
                 if isinstance(videos, torch.Tensor):
                     videos = [videos, ]
@@ -533,14 +542,76 @@ def validate(val_loader, transform_gpu, model, args, num_videos):
                 for crop in videos:
                     crop = crop.cuda(args.gpu, non_blocking=True)
                     if args.fused_decode_crop and len(transform_gpu) > 0:
+                        print('crop initial.shape = {}'.format(crop.shape))
                         crop = crop.permute(0, 4, 1, 2, 3)
                         crop = transform_gpu(crop)
+                    print("crops max = {}".format(crop.max()))
+                    print("crops min = {}".format(crop.min()))
                     logits = model(crop)
                     logits_allcrops.append(logits)
                 logits_allcrops = torch.stack(logits_allcrops, 1)
                 probs_allcrops = torch.softmax(logits_allcrops, dim=2)
+                print('Max prosb_allcrops = {}'.format(probs_allcrops.max()))
                 targets = targets.cuda(args.gpu, non_blocking=True)
                 targets_repeated = torch.repeat_interleave(targets, len(videos))
+                
+                print('logits_allcrops.shape = {}'.format(logits_allcrops.shape))
+                print('argmax = {}'.format(logits_allcrops[0,0,:].argmax(dim=-1)))
+                # show the video with matplotlib
+                import matplotlib.pyplot as plt
+                # Display the first frame of the first video in the batch.
+                # Assume videos[0] is a tensor of shape (B, T, H, W, C)
+                video_tensor = videos[0]  # using the first crop
+                first_video = video_tensor[0]  # first video in the batch
+                first_frame = first_video[0]     # first frame of the video
+
+                # Convert tensor to numpy array and ensure type is uint8
+                frame_np = first_frame.detach().cpu().numpy().astype("uint8")
+
+                plt.imshow(frame_np)
+                # plt.title(f"Sample Target: {targets[0].item()}")
+                # add text prediction argmax
+                pred = logits_allcrops[0, 0, :].argmax(dim=-1).item()
+                plt.title(f"Sample Target: {targets[0].item()}, Pred: {pred}")
+                # use mapping_vn2act to get the name of the action
+                if args.dataset == 'ek100_cls':
+                    # verb
+                    verb_name = args.mapping_act2v[pred]
+                    # add text to show the action name
+                    plt.text(0, 0, f"Verb: {verb_name}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+                    gt_verb_name = args.mapping_act2v[targets[0].item()]
+                    plt.text(0, 20, f"GT Verb: {gt_verb_name}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+
+                    # NOUN
+                    noun_name = args.mapping_act2n[pred]
+                    # add text to show the action name
+                    plt.text(0, 40, f"Noun: {noun_name}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+                    gt_noun_name = args.mapping_act2n[targets[0].item()]
+                    plt.text(0, 60, f"GT Noun: {gt_noun_name}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+
+                    noun_to_noun_text = pd.read_csv('datasets/EK100/epic-kitchens-100-annotations/EPIC_100_noun_classes.csv')
+                    verb_to_verb_text = pd.read_csv('datasets/EK100/epic-kitchens-100-annotations/EPIC_100_verb_classes.csv')
+
+                    noun_text = noun_to_noun_text['key'][noun_name]
+                    verb_text = verb_to_verb_text['key'][verb_name]
+
+                    noun_gt_text = noun_to_noun_text['key'][gt_noun_name]
+                    verb_gt_text = verb_to_verb_text['key'][gt_verb_name]
+
+                    plt.text(0, 80, f"Pred Noun: {noun_text}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+                    plt.text(0, 100, f"GT Noun: {noun_gt_text}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+
+                    plt.text(0, 120, f"Pred Verb: {verb_text}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+                    plt.text(0, 140, f"GT Verb: {verb_gt_text}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+
+                    # categories_pred = args.label[pred]
+                    # plt.text(0, 80, f"Categories: {categories_pred}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+                    # gt_categories = args.label[targets[0].item()]
+                    # plt.text(0, 100, f"GT Categories: {gt_categories}", color='white', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
+
+
+                plt.axis("off")
+                plt.show()
 
                 acc1, acc5 = accuracy(torch.flatten(logits_allcrops, 0, 1), targets_repeated, topk=(1, 5))
                 metrics['Acc@1'].update(acc1.item(), targets_repeated.size(0))
@@ -557,7 +628,6 @@ def validate(val_loader, transform_gpu, model, args, num_videos):
                     all_probs[j].append(gathered_probs[j].detach().cpu())
                     all_targets[j].append(gathered_targets[j].detach().cpu())
                 total_num += logits_allcrops.shape[0] * args.world_size
-
                 # measure elapsed time
                 batch_time.update(time.time() - end)
                 end = time.time()
