@@ -51,15 +51,15 @@ def parse_args():
                        help='Record output video')
     parser.add_argument('--output_video', type=str, default="output.mp4",
                        help='Path to save output video')
-    parser.add_argument('--fps', type=int, default=30,
+    parser.add_argument('--fps', type=int, default=20,
                        help='FPS for output video')
     parser.add_argument('--display', action='store_true', default=False,
                        help='Display visualization')
     parser.add_argument('--add_caption', action='store_true', default=True,
                        help='Add prediction captions to the output video')
-    parser.add_argument('--font_scale', type=float, default=1.0,
+    parser.add_argument('--font_scale', type=float, default=0.75,
                        help='Font scale for captions')
-    parser.add_argument('--font_thickness', type=int, default=2,
+    parser.add_argument('--font_thickness', type=int, default=1,
                        help='Font thickness for captions')
     return parser.parse_args()
 
