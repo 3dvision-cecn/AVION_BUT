@@ -77,7 +77,7 @@ if __name__ == "__main__":
     mapping_act2n = {i: int(vn.split(':')[1]) for (vn, i) in mapping_vn2act.items()}
 
     # Load pretraining checkpoint and update state dict keys
-    ckpt = torch.load("/home/eongan/ethz/3d_vision/AVION/avion_pretrain_lavila_vitb_best.pt", map_location='cpu')
+    ckpt = torch.load("avion_pretrain_lavila_vitb_best.pt", map_location='cpu')
     state_dict = OrderedDict()
     for k, v in ckpt['state_dict'].items():
         state_dict[k.replace('module.', '')] = v
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     model = model.cuda()
 
     # Load finetuning checkpoint correctly
-    checkpoint = torch.load("/home/eongan/ethz/3d_vision/AVION/avion_finetune_cls_lavila_vitb_best.pt", map_location='cpu')
+    checkpoint = torch.load("avion_finetune_cls_lavila_vitb_best.pt", map_location='cpu')
     print("Checkpoint keys:", list(checkpoint.keys()))
 
     # Fix module prefix issue in checkpoint
