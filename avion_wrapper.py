@@ -210,6 +210,7 @@ class AVIONForwardModule(nn.Module):
     def get_text(self, pred):
         n_idx = self.mapping_act2n[pred]
         v_idx = self.mapping_act2v[pred]
+        print(f"length of action mapping: {len(self.mapping_act2n)}")
         n_text = self.noun_to_noun_text['key'][n_idx]
         v_text = self.verb_to_verb_text['key'][v_idx]
 
